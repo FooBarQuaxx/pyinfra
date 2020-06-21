@@ -31,14 +31,32 @@ def make_names_data(directory=None):
     }, ['@chroot']
 
 
+def _chroot_cmd(use_nspawn, chroot_extra_opts, chroot_directory, command):
+    cmd = [
+        'systemd-nspawn' if use_nspawn else 'chroot',
+        '-D {0}'.format(chroot_directory) if use_nspawn else chroot_directory,
+        command,
+    ]
+    if chroot_extra_opts.strip():
+        cmd.insert(1, chroot_extra_opts.strip())
+
+    return ' '.join(cmd)
+
+
 def connect(state, host, for_fact=None):
     chroot_directory = host.data.chroot_directory
+    use_nspawn = host.host_data.get('use_nspawn', False)
+    chroot_extra_opts = host.host_data.get('chroot_extra_opts', '')
 
     try:
         with progress_spinner({'chroot run'}):
-            local.shell(
-                'chroot {0} ls'.format(chroot_directory), splitlines=True,
+            connect_check_cmd = _chroot_cmd(
+                use_nspawn=use_nspawn,
+                chroot_extra_opts=chroot_extra_opts,
+                chroot_directory=chroot_directory,
+                command='ls',
             )
+            local.shell(connect_check_cmd, splitlines=True)
     except PyinfraError as e:
         raise ConnectError(e.args[0])
 
@@ -82,8 +100,15 @@ def run_shell_command(
     )
 
     command = shlex_quote(command)
+    use_nspawn = host.host_data.get('use_nspawn', False)
+    chroot_extra_opts = host.host_data.get('chroot_extra_opts', '')
 
-    chroot_command = 'chroot {0} sh -c {1}'.format(chroot_directory, command)
+    chroot_command = _chroot_cmd(
+        use_nspawn=use_nspawn,
+        chroot_extra_opts=chroot_extra_opts,
+        chroot_directory=chroot_directory,
+        command='sh -c {0}'.format(command),
+    )
 
     return run_local_shell_command(
         state,

@@ -55,6 +55,7 @@ NPM
 NetworkAdapterConfiguration
 Noop
 Npm
+nspawn
 Openvz
 PACMAN
 POSIX

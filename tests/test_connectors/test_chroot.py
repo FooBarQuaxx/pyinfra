@@ -47,6 +47,15 @@ class TestLocalConnector(TestCase):
         host.connect(state, for_fact=True)
         assert len(state.active_hosts) == 0
 
+    def test_connect_host_with_nspawn(self):
+        inventory = make_inventory(hosts=(
+            ('@chroot/not-a-chroot', {'use_nspawn': True}),
+        ))
+        state = State(inventory, Config())
+        host = inventory.get_host('@chroot/not-a-chroot')
+        host.connect(state, for_fact=True)
+        assert len(state.active_hosts) == 0
+
     def test_connect_all_error(self):
         inventory = make_inventory(hosts=('@chroot/a-broken-chroot',))
         state = State(inventory, Config())
@@ -74,6 +83,64 @@ class TestLocalConnector(TestCase):
         command = make_unix_command(command)
         command = shlex_quote(command)
         docker_command = 'chroot /not-a-chroot sh -c {0}'.format(command)
+        shell_command = make_unix_command(docker_command)
+
+        self.fake_popen_mock.assert_called_with(
+            shell_command, shell=True,
+            stdout=PIPE, stderr=PIPE, stdin=PIPE,
+        )
+
+    def test_run_shell_command_with_nspawn(self):
+        inventory = make_inventory(hosts=(
+            ('@chroot/not-a-chroot', {'use_nspawn': True}),
+        ))
+        state = State(inventory, Config())
+        host = inventory.get_host('@chroot/not-a-chroot')
+        host.connect(state)
+
+        command = 'echo hoi'
+        self.fake_popen_mock().returncode = 0
+        out = host.run_shell_command(
+            state, command,
+            stdin='hello',
+            get_pty=True,
+            print_output=True,
+        )
+        assert len(out) == 3
+        assert out[0] is True
+
+        command = make_unix_command(command)
+        command = shlex_quote(command)
+        docker_command = 'systemd-nspawn -D /not-a-chroot sh -c {0}'.format(command)
+        shell_command = make_unix_command(docker_command)
+
+        self.fake_popen_mock.assert_called_with(
+            shell_command, shell=True,
+            stdout=PIPE, stderr=PIPE, stdin=PIPE,
+        )
+
+    def test_run_shell_command_with_extra_opts(self):
+        inventory = make_inventory(hosts=(
+            ('@chroot/not-a-chroot', {'chroot_extra_opts': '--skip-chdir'}),
+        ))
+        state = State(inventory, Config())
+        host = inventory.get_host('@chroot/not-a-chroot')
+        host.connect(state)
+
+        command = 'echo hoi'
+        self.fake_popen_mock().returncode = 0
+        out = host.run_shell_command(
+            state, command,
+            stdin='hello',
+            get_pty=True,
+            print_output=True,
+        )
+        assert len(out) == 3
+        assert out[0] is True
+
+        command = make_unix_command(command)
+        command = shlex_quote(command)
+        docker_command = 'chroot --skip-chdir /not-a-chroot sh -c {0}'.format(command)
         shell_command = make_unix_command(docker_command)
 
         self.fake_popen_mock.assert_called_with(
